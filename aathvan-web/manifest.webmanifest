@@ -1,0 +1,15 @@
+{
+  "name": "Aathvan",
+  "short_name": "Aathvan",
+  "description": "Remember things by chatting or talking, in English, मराठी or हिंदी. Works offline.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F3F4EE",
+  "theme_color": "#1F3A56",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

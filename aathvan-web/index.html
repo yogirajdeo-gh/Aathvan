@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="mr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Aathvan</title>
+<meta name="description" content="Remember things by chatting or talking, in English, मराठी or हिंदी. Works offline.">
+<meta name="theme-color" content="#F3F4EE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#11161D" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Aathvan">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><h1>आठवण</h1><span>Aathvan</span></div>
+    <div class="tabs" role="tablist">
+      <button id="tab-chat" role="tab" aria-selected="true">Chat</button>
+      <button id="tab-list" role="tab" aria-selected="false">List</button>
+    </div>
+  </header>
+
+  <main id="scroller">
+    <section id="view-chat" class="view" aria-live="polite"></section>
+    <section id="view-list" class="view" hidden>
+      <input id="search" type="search" placeholder="Search… / शोधा… / खोजें…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <div class="seg" id="seg">
+        <button data-f="open" aria-pressed="true">Open <span id="c-open">0</span></button>
+        <button data-f="done" aria-pressed="false">Done <span id="c-done">0</span></button>
+        <button data-f="all" aria-pressed="false">All</button>
+      </div>
+      <div id="list" class="view"></div>
+      <p class="note">Nothing is ever deleted. Tap the circle to mark done, tap again to reopen.</p>
+      <div class="backup">
+        <button id="export" type="button">Save a backup copy</button>
+        <label class="linkish" for="import">Restore from a backup</label>
+        <input id="import" type="file" accept="application/json,.json" hidden>
+      </div>
+      <p class="note" id="backup-msg" hidden></p>
+    </section>
+  </main>
+
+  <form class="composer" id="composer">
+    <button class="voice-btn" id="voice-open" type="button" aria-label="Voice chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
+    <textarea id="input" rows="1" placeholder="Remember… / लक्षात ठेव…" aria-label="Message" autocorrect="off" autocapitalize="sentences" spellcheck="false"></textarea>
+    <button class="send" id="send" type="submit" aria-label="Send" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+    </button>
+  </form>
+</div>
+
+<!-- Voice chat -->
+<div class="voice" id="voice" hidden role="dialog" aria-modal="true" aria-label="Voice chat">
+  <div class="voice-top">
+    <div class="langs" id="langs">
+      <button data-lang="mr-IN">मराठी</button>
+      <button data-lang="hi-IN">हिंदी</button>
+      <button data-lang="en-IN">English</button>
+    </div>
+    <button class="icon-btn" id="voice-close" type="button" aria-label="Close voice chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+
+  <div class="voice-body">
+    <p class="heard" id="heard"></p>
+    <div class="reply" id="reply" hidden></div>
+  </div>
+
+  <div class="voice-bottom">
+    <button class="big-mic" id="big-mic" type="button" aria-label="Talk">
+      <span class="ring"></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
+    <p class="voice-status" id="voice-status">Tap to talk</p>
+    <button class="speak-toggle" id="speak-toggle" type="button" aria-pressed="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="waves" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/><path class="mute" d="M16 9l5 6M21 9l-5 6"/></svg>
+      <span>Read replies aloud</span>
+    </button>
+  </div>
+</div>
+
+<script src="brain.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
