@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  const VERSION = 4;
   const B = window.Brain;
   const $ = (s) => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -476,10 +477,17 @@
     if (saved) state = { version: 1, memories: saved.memories || [], chat: saved.chat || [] };
     render();
     showTab("chat");
+    $("#version").textContent = "Aathvan version " + VERSION;
     try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) {}
   })();
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    // When a new version takes over, reload once so it's used straight away.
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (hadController && !reloaded) { reloaded = true; location.reload(); }
+    });
+    navigator.serviceWorker.register("sw.js").then((r) => r.update()).catch(() => {});
   }
 })();

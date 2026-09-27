@@ -1,9 +1,16 @@
 // Keeps the whole app on the phone so it opens with no internet.
-const CACHE = "aathvan-v3";
+// Online: always fetch the latest files, so updates arrive at once.
+// Offline: use the saved copy.
+const CACHE = "aathvan-v4";
 const FILES = ["./", "index.html", "style.css", "app.js", "brain.js", "manifest.webmanifest", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  // cache: "reload" skips the browser's short-term cache, so stale files are never saved.
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: "reload" }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (e) => {
@@ -14,21 +21,20 @@ self.addEventListener("activate", (e) => {
   );
 });
 
-// Serve from the phone first; quietly refresh the copy when online.
 self.addEventListener("fetch", (e) => {
-  if (e.request.method !== "GET") return;
-  e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then((cached) => {
-      const fresh = fetch(e.request)
-        .then((res) => {
-          if (res.ok && new URL(e.request.url).origin === location.origin) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(e.request, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || fresh;
-    })
-  );
+  const req = e.request;
+  if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
+  e.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    try {
+      const fresh = await Promise.race([
+        fetch(req, { cache: "no-cache" }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("slow")), 4000)),
+      ]);
+      if (fresh.ok) cache.put(req, fresh.clone());
+      return fresh;
+    } catch (err) {
+      return (await cache.match(req, { ignoreSearch: true })) || (await cache.match("index.html")) || Response.error();
+    }
+  })());
 });
