@@ -1,5 +1,5 @@
 // Keeps the whole app on the phone so it opens with no internet.
-const CACHE = "aathvan-v1";
+const CACHE = "aathvan-v3";
 const FILES = ["./", "index.html", "style.css", "app.js", "brain.js", "manifest.webmanifest", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {

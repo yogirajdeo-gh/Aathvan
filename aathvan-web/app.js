@@ -62,12 +62,12 @@
   }
 
   // Runs one message through the brain and applies what it decided.
-  function send(text, viaVoice = false) {
+  function send(text, viaVoice = false, replyLang = null) {
     text = text.trim();
     if (!text) return null;
     const now = new Date();
     state.chat.push({ id: newId(), role: "user", text, at: now.toISOString(), voice: viaVoice || undefined });
-    const plan = B.respond(text, state.memories, now);
+    const plan = B.respond(text, state.memories, now, replyLang ? { lang: replyLang } : {});
     const actions = [];
     if (plan.add) { state.memories.push(plan.add); actions.push({ kind: "added", id: plan.add.id }); }
     for (const id of plan.complete) { const m = memory(id); if (m) { m.done = true; m.doneAt = now.toISOString(); actions.push({ kind: "completed", id }); } }
@@ -275,7 +275,7 @@
   let rec = null, listening = false, finalText = "", interimText = "";
 
   const VOICE_COPY = {
-    "mr-IN": { tap: "बोलण्यासाठी टॅप करा", listening: "ऐकत आहे… बोलून झाल्यावर थांबा", again: "पुन्हा बोलण्यासाठी टॅप करा", placeholder: "बोला… उदा. “उद्या दूध आणायचं आहे”" },
+    "mr-IN": { tap: "बोलण्यासाठी टॅप करा", listening: "ऐकत आहे… (काही शब्द हिंदी स्पेलिंगमध्ये येऊ शकतात)", again: "पुन्हा बोलण्यासाठी टॅप करा", placeholder: "बोला… उदा. “उद्या दूध आणायचं आहे”" },
     "hi-IN": { tap: "बोलने के लिए टैप करें", listening: "सुन रहा हूँ… बोलकर रुकें", again: "फिर से बोलने के लिए टैप करें", placeholder: "बोलिए… जैसे “कल बिजली का बिल भरना है”" },
     "en-IN": { tap: "Tap to talk", listening: "Listening… pause when you're done", again: "Tap to talk again", placeholder: "Say something like “Remind me to call the bank on Monday”" },
   };
@@ -308,18 +308,26 @@
     voice.hidden = true;
   }
 
+  // iPhone can accept a language it doesn't really support and then wait
+  // forever, so these timers turn silence into a clear message.
+  let micTimer = null, heardTimer = null, gotAudio = false, gotWords = false;
+  const clearTimers = () => { clearTimeout(micTimer); clearTimeout(heardTimer); };
+
   function startListening() {
     if (!Rec || listening) return;
     if ("speechSynthesis" in window) speechSynthesis.cancel();
-    finalText = ""; interimText = "";
+    finalText = ""; interimText = ""; gotAudio = false; gotWords = false;
     replyBox.hidden = true;
     showHeard(copy().placeholder, true);
     try {
       rec = new Rec();
-      rec.lang = voiceLang;
+      // iPhone doesn't offer Marathi speech recognition to websites, so Marathi
+      // is heard through the Hindi recogniser (same script, lots of shared words).
+      rec.lang = voiceLang === "mr-IN" ? "hi-IN" : voiceLang;
       rec.interimResults = true;
       rec.continuous = false;
       rec.maxAlternatives = 1;
+      rec.onaudiostart = () => { gotAudio = true; status.textContent = copy().listening; };
       rec.onresult = (e) => {
         interimText = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -327,22 +335,30 @@
           if (r.isFinal) finalText += r[0].transcript; else interimText += r[0].transcript;
         }
         const t = (finalText + " " + interimText).trim();
-        if (t) showHeard(t, false);
+        if (t) { gotWords = true; clearTimeout(heardTimer); showHeard(t, false); }
       };
-      rec.onerror = (e) => { rec._error = e.error; };
+      rec.onerror = (e) => { if (rec) rec._error = e.error; };
       rec.onend = () => finishListening(rec && rec._error);
       rec.start();
       listening = true;
       bigMic.classList.add("listening");
       bigMic.setAttribute("aria-label", "Stop");
-      status.textContent = copy().listening;
+      status.textContent = "Starting the microphone…";
+      micTimer = setTimeout(() => { if (listening && !gotAudio) giveUp("no-mic"); }, 5000);
+      heardTimer = setTimeout(() => { if (listening && !gotWords) giveUp("no-words"); }, 12000);
     } catch (err) {
       listening = false;
       status.textContent = "Couldn't start the microphone. Tap to try again.";
     }
   }
 
+  function giveUp(reason) {
+    if (rec) { rec.onend = null; rec.onresult = null; try { rec.abort(); } catch (e) {} rec = null; }
+    finishListening(reason);
+  }
+
   function stopListening(silent) {
+    clearTimers();
     if (!rec) return;
     if (silent) { rec.onend = null; rec.onresult = null; try { rec.abort(); } catch (e) {} resetMic(); rec = null; return; }
     try { rec.stop(); } catch (e) {}
@@ -354,24 +370,30 @@
   }
 
   function finishListening(error) {
+    clearTimers();
     resetMic();
     rec = null;
     const said = (finalText + " " + interimText).trim();
     if (said) {
-      const bot = send(said, true);
+      $("#kbd-fallback").hidden = true;
+      const bot = send(said, true, voiceLang === "mr-IN" ? "mr" : null);
       showReply(bot);
       status.textContent = copy().again;
       return;
     }
+    const langName = { "mr-IN": "Marathi", "hi-IN": "Hindi", "en-IN": "English" }[voiceLang];
     const messages = {
-      "not-allowed": "Microphone is blocked. Allow the microphone for this site, and turn on Settings → General → Keyboard → Enable Dictation.",
+      "not-allowed": "Microphone is blocked. In Safari tap aA → Website Settings → Microphone → Allow, and turn on Settings → General → Keyboard → Enable Dictation.",
       "service-not-allowed": "Voice needs Dictation turned on: Settings → General → Keyboard → Enable Dictation. Then tap the mic again.",
-      "network": "Your iPhone needs internet to understand this language right now. You can still type in the chat.",
-      "language-not-supported": "Your iPhone can't understand this language by voice. Try another language, or type in the chat.",
+      "network": "Your iPhone needs internet to understand " + langName + " by voice. You can still type, or use the keyboard mic.",
+      "language-not-supported": "Your iPhone can't understand " + langName + " by voice here. Try another language, or use the keyboard mic.",
       "audio-capture": "No microphone found. Check that no other app is using it.",
+      "no-mic": "The microphone didn't turn on. In Safari tap aA → Website Settings → Microphone → Allow, and check Settings → General → Keyboard → Enable Dictation.",
+      "no-words": "The mic was on but no words came back. Your iPhone may not support " + langName + " voice in websites. Try हिंदी or English, or use the keyboard mic below.",
     };
     showHeard(copy().placeholder, true);
     status.textContent = messages[error] || (error === "no-speech" || !error ? "I didn't hear anything. " + copy().tap : "Something went wrong with voice. " + copy().tap);
+    $("#kbd-fallback").hidden = false;
   }
 
   function showReply(bot) {
@@ -424,6 +446,12 @@
 
   $("#voice-open").onclick = openVoice;
   $("#voice-close").onclick = closeVoice;
+  // The keyboard mic supports more languages (including Marathi) than website voice.
+  $("#kbd-fallback").onclick = () => {
+    closeVoice();
+    showTab("chat");
+    input.focus();
+  };
   bigMic.onclick = () => (listening ? stopListening(false) : startListening());
   $("#langs").addEventListener("click", (e) => {
     const b = e.target.closest("button"); if (!b) return;

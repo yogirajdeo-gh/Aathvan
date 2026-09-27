@@ -141,6 +141,7 @@ textarea {
   @keyframes pulse { from { transform: scale(1); opacity: .8; } to { transform: scale(1.6); opacity: 0; } }
 }
 .voice-status { margin: 0; color: var(--voice-muted); font-size: 15px; text-align: center; min-height: 1.5em; max-width: 34ch; }
+.kbd-fallback { border: 1px solid #ffffff33; background: none; color: var(--voice-ink); border-radius: 999px; padding: 8px 16px; font-size: 15px; cursor: pointer; }
 .speak-toggle { display: flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--voice-muted); font-size: 14px; cursor: pointer; padding: 6px; }
 .speak-toggle svg { width: 20px; height: 20px; }
 .speak-toggle[aria-pressed="true"] .mute, .speak-toggle[aria-pressed="false"] .waves { display: none; }

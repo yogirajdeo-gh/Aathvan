@@ -86,7 +86,7 @@
 
   const CONCEPTS = {
     milk: ["milk", "दूध", "doodh", "dudh"],
-    medicine: ["medicine", "medicines", "tablet", "tablets", "pills", "गोळी", "गोळ्या", "औषध", "औषधं", "औषधे", "दवा", "दवाई", "दवाइयां", "goli", "golya", "aushadh", "dawa", "dawai", "davai"],
+    medicine: ["medicine", "medicines", "tablet", "tablets", "pills", "गोळी", "गोळ्या", "औषध", "औषधं", "औषधे", "दवा", "दवाई", "दवाइयां", "goli", "golya", "aushadh", "dawa", "dawai", "davai", "गोली", "गोलियां", "गोलियाँ", "goliyan", "golian", "goliya"],
     money: ["money", "cash", "पैसे", "पैसा", "रुपये", "रुपया", "रक्कम", "paise", "paisa", "rupaye", "rupees", "rs"],
     mother: ["mom", "mother", "mummy", "mum", "आई", "माँ", "मां", "मम्मी", "aai", "aie", "maa", "ma"],
     father: ["dad", "father", "papa", "बाबा", "वडील", "पापा", "पिताजी", "baba", "vadil", "pitaji"],
@@ -321,7 +321,9 @@
       "today", "tomorrow", "tonight", "yesterday", "week", "next", "day", "days", "aj", "udyaa", "tmrw", "आठवड्यात", "हफ्ते", "सप्ताह", "अगले", "पुढच्या",
     ];
     const s = new Set(base.map(normalize));
-    for (const list of [REMEMBER, DONE, REOPEN, DELETE, PENDING, THANKS]) for (const p of list) for (const w of words(normalize(p))) s.add(w);
+    // Words inside command phrases are fillers too, except real things like
+    // "आई" (mother) that happen to appear in a phrase such as "ले आई".
+    for (const list of [REMEMBER, DONE, REOPEN, DELETE, PENDING, THANKS]) for (const p of list) for (const w of words(normalize(p))) if (!CONCEPT_BY_RAW[w]) s.add(w);
     for (const w of Q_WORDS) s.add(w);
     for (const w of Object.keys(WEEKDAYS)) s.add(w);
     for (const w of Object.keys(MONTHS)) s.add(w);
@@ -492,11 +494,12 @@
 
   // ---------- Entry point ----------
 
-  function respond(text, memories, now = new Date()) {
+  // opts.lang forces the reply language (e.g. Marathi heard through the Hindi recogniser).
+  function respond(text, memories, now = new Date(), opts = {}) {
     const norm = normalize(text);
     const ws = words(norm);
     const wset = new Set(ws);
-    const lang = detectLang(norm);
+    const lang = opts.lang || detectLang(norm);
     const has = (list) => list.some((p) => (p.includes(" ") ? norm.includes(p) : wset.has(p)));
     const done = (plan) => Object.assign({ complete: [], reopen: [], refs: [] }, plan);
 
