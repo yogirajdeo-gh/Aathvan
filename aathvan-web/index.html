@@ -72,6 +72,15 @@
   </div>
 
   <div class="voice-body">
+    <div class="mr-setup" id="mr-setup" hidden>
+      <h2>मराठी आवाज</h2>
+      <p>अचूक मराठी ओळखण्यासाठी एकदाच सुमारे 200 MB डाउनलोड करावं लागेल. Wi-Fi वापरा. त्यानंतर इंटरनेटशिवायही चालेल.</p>
+      <p class="sub">Accurate Marathi voice needs a one-time download of about 200 MB (AI4Bharat's Marathi speech model). Use Wi-Fi. After that it works offline, on this phone only.</p>
+      <button class="primary" id="mr-download" type="button">डाउनलोड करा · Download</button>
+      <div class="progress" id="mr-progress" hidden><span></span></div>
+      <p class="sub" id="mr-pct"></p>
+      <button class="linkish-dark" id="mr-hindi" type="button">आत्ता नको, हिंदी ओळख वापरा · Not now</button>
+    </div>
     <p class="heard" id="heard"></p>
     <div class="reply" id="reply" hidden></div>
   </div>
@@ -90,6 +99,9 @@
   </div>
 </div>
 
+<script src="vendor/ort.wasm.min.js"></script>
+<script src="marathi-asr.js"></script>
+<script src="marathi-voice.js"></script>
 <script src="brain.js"></script>
 <script src="app.js"></script>
 </body>

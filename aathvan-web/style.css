@@ -141,6 +141,16 @@ textarea {
   @keyframes pulse { from { transform: scale(1); opacity: .8; } to { transform: scale(1.6); opacity: 0; } }
 }
 .voice-status { margin: 0; color: var(--voice-muted); font-size: 15px; text-align: center; min-height: 1.5em; max-width: 34ch; }
+.mr-setup { display: flex; flex-direction: column; gap: 10px; background: #ffffff10; border-radius: 16px; padding: 18px 16px; }
+.mr-setup h2 { margin: 0; font: 700 22px var(--display); }
+.mr-setup p { margin: 0; font-size: 16px; }
+.mr-setup .sub { color: var(--voice-muted); font-size: 14px; }
+.mr-setup .primary { border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 600; font-size: 16px; padding: 12px 18px; cursor: pointer; }
+.mr-setup .primary:disabled { opacity: .5; }
+.progress { height: 8px; border-radius: 999px; background: #ffffff1f; overflow: hidden; }
+.progress span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.linkish-dark { border: 0; background: none; color: var(--voice-muted); text-decoration: underline; font-size: 14px; cursor: pointer; padding: 4px; align-self: center; }
+.big-mic.listening { box-shadow: 0 0 0 calc(var(--lvl, 0) * 24px) #D2543A55; transition: box-shadow .08s; }
 .kbd-fallback { border: 1px solid #ffffff33; background: none; color: var(--voice-ink); border-radius: 999px; padding: 8px 16px; font-size: 15px; cursor: pointer; }
 .speak-toggle { display: flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--voice-muted); font-size: 14px; cursor: pointer; padding: 6px; }
 .speak-toggle svg { width: 20px; height: 20px; }

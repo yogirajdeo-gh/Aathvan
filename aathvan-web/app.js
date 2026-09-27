@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const VERSION = 4;
+  const VERSION = 5;
   const B = window.Brain;
   const $ = (s) => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -276,7 +276,7 @@
   let rec = null, listening = false, finalText = "", interimText = "";
 
   const VOICE_COPY = {
-    "mr-IN": { tap: "बोलण्यासाठी टॅप करा", listening: "ऐकत आहे… (काही शब्द हिंदी स्पेलिंगमध्ये येऊ शकतात)", again: "पुन्हा बोलण्यासाठी टॅप करा", placeholder: "बोला… उदा. “उद्या दूध आणायचं आहे”" },
+    "mr-IN": { tap: "बोलण्यासाठी टॅप करा", listening: "ऐकत आहे… बोलून झाल्यावर थोडं थांबा", hindiListening: "ऐकत आहे… (हिंदी ओळख: काही शब्द हिंदी स्पेलिंगमध्ये येतील)", again: "पुन्हा बोलण्यासाठी टॅप करा", placeholder: "बोला… उदा. “उद्या दूध आणायचं आहे”" },
     "hi-IN": { tap: "बोलने के लिए टैप करें", listening: "सुन रहा हूँ… बोलकर रुकें", again: "फिर से बोलने के लिए टैप करें", placeholder: "बोलिए… जैसे “कल बिजली का बिल भरना है”" },
     "en-IN": { tap: "Tap to talk", listening: "Listening… pause when you're done", again: "Tap to talk again", placeholder: "Say something like “Remind me to call the bank on Monday”" },
   };
@@ -295,7 +295,7 @@
     voice.hidden = false;
     replyBox.hidden = true;
     paintLangs();
-    if (!Rec) {
+    if (!Rec && voiceLang !== "mr-IN") {
       showHeard("Voice isn't available in this browser.", true);
       status.textContent = "Open Aathvan in Safari on your iPhone, or type in the chat instead.";
       bigMic.disabled = true;
@@ -305,6 +305,7 @@
   }
   function closeVoice() {
     stopListening(true);
+    hideSetup();
     if ("speechSynthesis" in window) speechSynthesis.cancel();
     voice.hidden = true;
   }
@@ -315,6 +316,11 @@
   const clearTimers = () => { clearTimeout(micTimer); clearTimeout(heardTimer); };
 
   function startListening() {
+    if (voiceLang === "mr-IN" && !useHindiForMarathi) return startMarathi();
+    return startApple();
+  }
+
+  function startApple() {
     if (!Rec || listening) return;
     if ("speechSynthesis" in window) speechSynthesis.cancel();
     finalText = ""; interimText = ""; gotAudio = false; gotWords = false;
@@ -328,7 +334,7 @@
       rec.interimResults = true;
       rec.continuous = false;
       rec.maxAlternatives = 1;
-      rec.onaudiostart = () => { gotAudio = true; status.textContent = copy().listening; };
+      rec.onaudiostart = () => { gotAudio = true; status.textContent = voiceLang === "mr-IN" ? copy().hindiListening : copy().listening; };
       rec.onresult = (e) => {
         interimText = "";
         for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -344,7 +350,7 @@
       listening = true;
       bigMic.classList.add("listening");
       bigMic.setAttribute("aria-label", "Stop");
-      status.textContent = "Starting the microphone…";
+      status.textContent = voiceLang === "mr-IN" ? copy().hindiListening : "Starting the microphone…";
       micTimer = setTimeout(() => { if (listening && !gotAudio) giveUp("no-mic"); }, 5000);
       heardTimer = setTimeout(() => { if (listening && !gotWords) giveUp("no-words"); }, 12000);
     } catch (err) {
@@ -360,6 +366,10 @@
 
   function stopListening(silent) {
     clearTimers();
+    if (mrRec) {
+      if (silent) { mrRec.cancel(); mrRec = null; resetMic(); } else finishMarathi();
+      return;
+    }
     if (!rec) return;
     if (silent) { rec.onend = null; rec.onresult = null; try { rec.abort(); } catch (e) {} resetMic(); rec = null; return; }
     try { rec.stop(); } catch (e) {}
@@ -395,6 +405,110 @@
     showHeard(copy().placeholder, true);
     status.textContent = messages[error] || (error === "no-speech" || !error ? "I didn't hear anything. " + copy().tap : "Something went wrong with voice. " + copy().tap);
     $("#kbd-fallback").hidden = false;
+  }
+
+  // ---------- Marathi voice (on-device IndicConformer model) ----------
+
+  const MV = window.MarathiVoice;
+  const setup = $("#mr-setup");
+  let mrRec = null, mrBusy = false, useHindiForMarathi = false;
+  if (MV) MV.checkDownloaded().catch(() => {});
+
+  function showSetup() {
+    setup.hidden = false;
+    heard.hidden = true;
+    status.textContent = "";
+    $("#mr-progress").hidden = true;
+    $("#mr-download").disabled = false;
+  }
+  function hideSetup() { setup.hidden = true; heard.hidden = false; }
+
+  $("#mr-download").onclick = async () => {
+    const btn = $("#mr-download"), bar = $("#mr-progress"), fill = bar.querySelector("span"), pct = $("#mr-pct");
+    btn.disabled = true;
+    bar.hidden = false;
+    pct.textContent = "0%";
+    try {
+      await MV.download((f, bytes) => {
+        fill.style.width = (f * 100).toFixed(1) + "%";
+        pct.textContent = `${Math.round(f * 100)}% · ${Math.round(bytes / 1e6)} MB`;
+      });
+      pct.textContent = "Getting it ready… / तयार करत आहे…";
+      await MV.load();
+      hideSetup();
+      showHeard(copy().placeholder, true);
+      status.textContent = "तयार! " + copy().tap;
+    } catch (e) {
+      btn.disabled = false;
+      pct.textContent = e && e.message === "download_failed"
+        ? "Download didn't finish. Check Wi-Fi and tap Download again."
+        : "Couldn't set up Marathi voice on this phone: " + ((e && e.message) || e);
+    }
+  };
+  $("#mr-hindi").onclick = () => {
+    useHindiForMarathi = true;
+    hideSetup();
+    startApple();
+  };
+
+  async function startMarathi() {
+    if (listening || mrBusy) return;
+    if (!MV || !window.ort) {
+      status.textContent = "Marathi voice didn't load. Open the app once with internet, then try again.";
+      return;
+    }
+    if (!MV.downloaded && !(await MV.checkDownloaded())) { showSetup(); return; }
+    hideSetup();
+    if ("speechSynthesis" in window) speechSynthesis.cancel();
+    replyBox.hidden = true;
+    $("#kbd-fallback").hidden = true;
+    showHeard(copy().placeholder, true);
+    listening = true;
+    bigMic.classList.add("listening");
+    bigMic.setAttribute("aria-label", "Stop");
+    status.textContent = copy().listening;
+    MV.load().catch(() => {});                  // warm the model up while you speak
+    try {
+      mrRec = await MV.record({
+        onLevel: (l) => bigMic.style.setProperty("--lvl", l.toFixed(2)),
+        onAutoStop: () => finishMarathi(),
+      });
+      if (!listening) { mrRec.cancel(); mrRec = null; }
+    } catch (e) {
+      mrRec = null;
+      resetMic();
+      status.textContent = "Microphone is blocked. In Safari tap aA → Website Settings → Microphone → Allow, then tap the mic again.";
+      $("#kbd-fallback").hidden = false;
+    }
+  }
+
+  async function finishMarathi() {
+    if (!mrRec) return;
+    const r = mrRec;
+    mrRec = null;
+    resetMic();
+    bigMic.style.setProperty("--lvl", 0);
+    mrBusy = true;
+    const { samples, spoke } = await r.stop();
+    if (!spoke || samples.length < MarathiASR.SR * 0.4) {
+      mrBusy = false;
+      status.textContent = "काहीच ऐकू आलं नाही. " + copy().tap;
+      return;
+    }
+    status.textContent = "समजून घेत आहे… / Understanding…";
+    try {
+      const text = (await MV.transcribe(samples)).trim();
+      mrBusy = false;
+      if (!text) { status.textContent = "शब्द समजले नाहीत. पुन्हा स्पष्ट बोला. " + copy().tap; return; }
+      showHeard(text, false);
+      const bot = send(text, true, "mr");
+      showReply(bot);
+      status.textContent = copy().again;
+    } catch (e) {
+      mrBusy = false;
+      status.textContent = "Marathi voice couldn't run on this phone (" + ((e && e.message) || e) + "). Use the keyboard mic instead.";
+      $("#kbd-fallback").hidden = false;
+    }
   }
 
   function showReply(bot) {

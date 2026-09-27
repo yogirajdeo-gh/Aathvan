@@ -27,7 +27,12 @@ The easiest way is GitHub Pages:
 - Tap the **blue mic** next to the message box.
 - Pick **मराठी / हिंदी / English** at the top, speak, and pause. It saves or answers, and can read the reply aloud (you can turn that off).
 - **Dictation must be on:** Settings → General → Keyboard → Enable Dictation. Allow the microphone when asked.
-- **Internet for voice:** voice uses Apple's speech recognition. For languages your iPhone can't recognise on the device (often Marathi), voice needs internet. Typing always works offline.
+- **Marathi voice:** iPhone has no Marathi speech recognition, so Aathvan brings its own. It runs [AI4Bharat's IndicConformer](https://github.com/AI4Bharat/IndicConformerASR) Marathi model on the phone.
+  - The first time you tap मराठी, it asks to download the model once (about 200 MB). Use Wi-Fi.
+  - After that, Marathi voice works offline, and nothing you say leaves the phone.
+  - Tested on real Marathi recordings (Google FLEURS), it got about 82% of words exactly right. Most of the rest were spelling variants (पोलिस/पोलीस, सतरा/१७).
+- **Hindi and English voice** use Apple's speech recognition, which may need internet. Typing always works offline.
+- **Model source:** the model is downloaded from Hugging Face ([yashwantraoraut/indic-conformer-marathi-onnx](https://huggingface.co/yashwantraoraut/indic-conformer-marathi-onnx)). Once downloaded, the copy on the phone keeps working even if that page changes.
 - **If the mic doesn't respond from the home-screen icon:** open the same link in Safari and use voice there. Both share the same notes.
 
 ## Keep a backup
@@ -42,6 +47,7 @@ Upload the changed files to the same GitHub repository. The phone picks up the n
 
 ## For developers
 
+- `marathi-asr.js`: audio features (NeMo log-mel) and CTC decoding for the Marathi model. `marathi-voice.js`: model download and caching, recording, and silence detection. `vendor/`: onnxruntime-web 1.22.0 (MIT licence).
 - `brain.js`: the rules brain (intents, transliteration, fuzzy matching, dates, replies). It works in the browser and in Node.
 - Run the tests: `TZ=Asia/Kolkata node --test test/brain.test.js`
 - Run it locally: `python3 -m http.server 8765` from this folder, then open http://localhost:8765

@@ -1,8 +1,9 @@
 // Keeps the whole app on the phone so it opens with no internet.
 // Online: always fetch the latest files, so updates arrive at once.
 // Offline: use the saved copy.
-const CACHE = "aathvan-v4";
-const FILES = ["./", "index.html", "style.css", "app.js", "brain.js", "manifest.webmanifest", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png"];
+const CACHE = "aathvan-v5";
+const FILES = ["./", "index.html", "style.css", "app.js", "brain.js", "manifest.webmanifest", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png",
+  "marathi-asr.js", "marathi-voice.js", "vendor/ort.wasm.min.js", "vendor/ort-wasm-simd-threaded.mjs", "vendor/ort-wasm-simd-threaded.wasm"];
 
 self.addEventListener("install", (e) => {
   // cache: "reload" skips the browser's short-term cache, so stale files are never saved.
@@ -16,7 +17,7 @@ self.addEventListener("install", (e) => {
 self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith("aathvan-v") && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
