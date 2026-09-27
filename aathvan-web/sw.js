@@ -1,7 +1,7 @@
 // Keeps the whole app on the phone so it opens with no internet.
 // Online: always fetch the latest files, so updates arrive at once.
 // Offline: use the saved copy.
-const CACHE = "aathvan-v5";
+const CACHE = "aathvan-v6";
 const FILES = ["./", "index.html", "style.css", "app.js", "brain.js", "manifest.webmanifest", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png",
   "marathi-asr.js", "marathi-voice.js", "vendor/ort.wasm.min.js", "vendor/ort-wasm-simd-threaded.mjs", "vendor/ort-wasm-simd-threaded.wasm"];
 
@@ -25,6 +25,14 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
+  // Calendar reminders are made on the phone and served from here; never from the internet.
+  if (new URL(req.url).pathname.endsWith("/alert.ics")) {
+    e.respondWith((async () => {
+      const c = await caches.open("aathvan-alerts");
+      return (await c.match(new URL("alert.ics", self.registration.scope).href)) || new Response("", { status: 404 });
+    })());
+    return;
+  }
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
     try {

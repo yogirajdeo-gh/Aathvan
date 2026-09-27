@@ -271,6 +271,76 @@
     return null;
   }
 
+  // ---------- Times ----------
+
+  const NUM_WORDS = {
+    "एक": 1, "दोन": 2, "दो": 2, "तीन": 3, "चार": 4, "पाच": 5, "पांच": 5, "पाँच": 5, "सहा": 6, "छह": 6, "सात": 7, "आठ": 8,
+    "नऊ": 9, "नौ": 9, "दहा": 10, "दस": 10, "अकरा": 11, "ग्यारह": 11, "बारा": 12, "बारह": 12,
+    ek: 1, don: 2, do: 2, teen: 3, tin: 3, char: 4, chaar: 4, pach: 5, paach: 5, panch: 5, paanch: 5, saha: 6, chhe: 6,
+    saat: 7, aath: 8, nau: 9, daha: 10, das: 10, akra: 11, gyarah: 11, bara: 12, barah: 12,
+    one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+  };
+  const NUM_ALT = ["\\d{1,2}(?:[:.]\\d{2})?", ...Object.keys(NUM_WORDS).sort((a, b) => b.length - a.length).map(escapeRe)].join("|");
+  const MOD_ALT = "साडे|साढ़े|साढे|sade|saade|saadhe|sadhe|सव्वा|सवा|savva|sava|पावणे|पौने|pavne|paune";
+  const MARK_ALT = "वाजता|वाजले|वाजेपर्यंत|वाजे|बजे|baje|vajta|vajata|wajta|vajle|o'clock|oclock";
+  const RE_CLOCK = new RegExp(`(?<![\\p{L}\\p{M}\\d])(?:(${MOD_ALT})\\s*)?(${NUM_ALT})\\s*(?:${MARK_ALT})(?![\\p{L}\\p{M}])`, "u");
+  const RE_AMPM = /(?<![\d:])(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)(?![\p{L}])/u;
+  const RE_AT = /(?<![\p{L}])at\s+(\d{1,2})(?:[:.](\d{2}))?(?![\d\p{L}%])/u;
+  const RE_24H = /(?<![\d/.-])([01]?\d|2[0-3]):([0-5]\d)(?![\d])/u;
+  const RE_IN_HOURS = /(\d{1,2})\s*(?:hours?|hrs?|तासांनी|तासाने|तासात|तास|घंटे|घंटों|घंटा|ghante|ghanto|ghanta|taas|tasani)(?![\p{L}\p{M}])/u;
+  const RE_IN_MINS = /(\d{1,3})\s*(?:minutes?|mins?|मिनिटांनी|मिनिटात|मिनिटं|मिनिट|मिनट|minat|minit)(?![\p{L}\p{M}])/u;
+
+  const PERIODS = [
+    ["morning", 9, ["morning", "सकाळी", "सकाळ", "सुबह", "sakali", "sakaali", "subah", "subha"]],
+    ["afternoon", 14, ["afternoon", "noon", "दुपारी", "दुपार", "दोपहर", "dupari", "dopahar"]],
+    ["evening", 18, ["evening", "संध्याकाळी", "संध्याकाळ", "सायंकाळी", "शाम", "sandhyakali", "sham", "shaam"]],
+    ["night", 21, ["night", "tonight", "रात्री", "रात्र", "रात", "ratri", "raat", "rat"]],
+  ];
+
+  /**
+   * A time mentioned in the text: { h, m } for a clock time, or { at: Date }
+   * for "in 2 hours". Null if none.
+   */
+  function parseTime(norm, now) {
+    const ws = words(norm), wset = new Set(ws);
+    let mm = norm.match(RE_IN_HOURS);
+    if (mm) return { at: new Date(now.getTime() + +mm[1] * 3600000) };
+    mm = norm.match(RE_IN_MINS);
+    if (mm) return { at: new Date(now.getTime() + +mm[1] * 60000) };
+
+    const period = (PERIODS.find(([, , list]) => list.some((w) => wset.has(w))) || [null])[0];
+    let h = null, m = 0, ampm = null;
+
+    if ((mm = norm.match(RE_AMPM))) { h = +mm[1]; m = mm[2] ? +mm[2] : 0; ampm = mm[3][0]; }
+    else if ((mm = norm.match(RE_CLOCK))) {
+      const num = mm[2];
+      if (/^\d/.test(num)) { const [a, b] = num.split(/[:.]/); h = +a; m = b ? +b : 0; }
+      else h = NUM_WORDS[num];
+      const mod = mm[1];
+      if (mod && /^(साडे|साढ़े|साढे|sade|saade|saadhe|sadhe)$/.test(mod)) m = 30;
+      else if (mod && /^(सव्वा|सवा|savva|sava)$/.test(mod)) m = 15;
+      else if (mod) { h = h - 1; m = 45; if (h === 0) h = 12; }
+    }
+    else if ((mm = norm.match(RE_24H))) { h = +mm[1]; m = +mm[2]; if (h > 12) ampm = "p"; else if (h === 0) { h = 12; ampm = "a"; } }
+    else if ((mm = norm.match(RE_AT))) { h = +mm[1]; m = mm[2] ? +mm[2] : 0; }
+
+    if (h === null) {
+      if (!period) return null;
+      const def = PERIODS.find(([p]) => p === period)[1];
+      return { h: def, m: 0 };
+    }
+    if (h < 1 || h > 12 || m > 59) { if (h >= 13 && h <= 23 && m <= 59) return { h, m }; return null; }
+    if (ampm === "a") h = h === 12 ? 0 : h;
+    else if (ampm === "p") h = h === 12 ? 12 : h + 12;
+    else if (period === "morning") h = h === 12 ? 0 : h;
+    else if (period === "afternoon") h = h < 12 && h <= 6 ? h + 12 : h;
+    else if (period === "evening" || period === "night") h = h < 12 ? h + 12 : h;
+    else if (h >= 1 && h <= 6) h += 12;            // "at 5" usually means 5 PM
+    return { h, m };
+  }
+
+  const hhmm = (h, m) => `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+
   // ---------- Word lists ----------
 
   const REMEMBER = [
@@ -334,17 +404,23 @@
 
   const pick = (l, en, mr, hi) => (l === "mr" ? mr : l === "hi" ? hi : en);
   const LOCALE = { en: "en-IN", mr: "mr-IN", hi: "hi-IN" };
+  const timeName = (hm, l) => {
+    const [h, m] = hm.split(":").map(Number);
+    return new Intl.DateTimeFormat(LOCALE[l], { hour: "numeric", minute: "2-digit" }).format(new Date(2000, 0, 1, h, m));
+  };
   const dayName = (d, l) => new Intl.DateTimeFormat(LOCALE[l], { weekday: "short", day: "numeric", month: "short" }).format(d);
 
   const Say = {
     greeting: (l) => pick(l, "Hi! Tell me anything to remember, or ask me what you saved.", "नमस्कार! काहीही लक्षात ठेवायला सांगा, किंवा काय ठेवलंय ते विचारा.", "नमस्ते! कुछ भी याद रखने को कहें, या पूछें कि क्या याद रखा है।"),
     welcome: (l) => pick(l, "You're welcome!", "काही हरकत नाही!", "कोई बात नहीं!"),
     whatToRemember: (l) => pick(l, "What should I remember?", "काय लक्षात ठेवू?", "क्या याद रखूँ?"),
-    saved: (l, due) => {
+    saved: (l, due, time) => {
       const base = pick(l, "Got it. I'll remember that.", "लक्षात ठेवलं.", "याद रख लिया।");
       if (!due) return base;
       const d = dayName(due, l);
-      return base + " " + pick(l, `For ${d}.`, `तारीख: ${d}.`, `तारीख: ${d}।`);
+      if (!time) return base + " " + pick(l, `For ${d}.`, `तारीख: ${d}.`, `तारीख: ${d}।`);
+      const t = timeName(time, l);
+      return base + " " + pick(l, `For ${d} at ${t}.`, `${d}, ${t}.`, `${d}, ${t}।`);
     },
     found: (l, n) => (n === 1 ? pick(l, "Here's what I found:", "हे सापडलं:", "ये मिला:") : pick(l, `I found ${n}:`, `${n} गोष्टी सापडल्या:`, `${n} चीज़ें मिलीं:`)),
     notFound: (l) => pick(l, "I couldn't find anything about that.", "याबद्दल काहीच सापडलं नाही.", "इसके बारे में कुछ नहीं मिला।"),
@@ -420,9 +496,19 @@
     const note = cleanNote(text);
     if (!note) return { lang, reply: Say.whatToRemember(lang) };
     let due = parseDate(norm, now);
-    if (due && due < startOfDay(now)) due = null;
-    const m = { id: newId(), text: note, createdAt: now.toISOString(), due: due ? ymd(due) : null, done: false, doneAt: null, said: text };
-    return { lang, reply: Say.saved(lang, due), add: m };
+    const t = parseTime(norm, now);
+    let time = null;
+    if (t && t.at) { due = startOfDay(t.at); time = hhmm(t.at.getHours(), t.at.getMinutes()); }
+    else if (t) {
+      time = hhmm(t.h, t.m);
+      if (!due) {                                       // "at 5" with no day: today, or tomorrow if 5 has passed
+        const today = new Date(now); today.setHours(t.h, t.m, 0, 0);
+        due = today > now ? startOfDay(now) : addDays(now, 1);
+      }
+    }
+    if (due && due < startOfDay(now)) { due = null; time = null; }
+    const m = { id: newId(), text: note, createdAt: now.toISOString(), due: due ? ymd(due) : null, time: due ? time : null, done: false, doneAt: null, said: text };
+    return { lang, reply: Say.saved(lang, due, m.time), add: m };
   }
 
   function pickOne(norm, pool) {
@@ -525,7 +611,7 @@
     return done(save(text, norm, lang, now));
   }
 
-  const Brain = { respond, normalize, words, tokens, key, translit, similarity, rank, contentTokens, detectLang, parseDate, ymd, fromYmd, startOfDay, dayName, LOCALE };
+  const Brain = { respond, normalize, words, tokens, key, translit, similarity, rank, contentTokens, detectLang, parseDate, parseTime, ymd, fromYmd, startOfDay, dayName, timeName, LOCALE };
   if (typeof module !== "undefined" && module.exports) module.exports = Brain;
   root.Brain = Brain;
 })(typeof globalThis !== "undefined" ? globalThis : this);

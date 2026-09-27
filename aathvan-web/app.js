@@ -1,9 +1,10 @@
 (() => {
   "use strict";
-  const VERSION = 5;
+  const VERSION = 6;
   const B = window.Brain;
   const $ = (s) => document.querySelector(s);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
   const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
   const chatEl = $("#view-chat"), listEl = $("#list"), scroller = $("#scroller");
@@ -79,12 +80,90 @@
     return bot;
   }
 
+  // ---------- alerts (through the iPhone's Calendar) ----------
+  // A web app can't schedule alerts on the phone by itself, but Calendar can:
+  // we hand it an event with an alarm, and Calendar alerts you offline, even
+  // when Aathvan is closed.
+
+  const DEFAULT_TIME = "09:00";
+  const icsEscape = (t) => String(t).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+
+  // Lines longer than 75 bytes are folded, never splitting a character.
+  function fold(line) {
+    const enc = new TextEncoder();
+    if (enc.encode(line).length <= 75) return line;
+    const out = [];
+    let cur = "", bytes = 0;
+    // Split between whole letters (a Devanagari letter can be several code points).
+    const parts = typeof Intl !== "undefined" && Intl.Segmenter
+      ? [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(line)].map((x) => x.segment)
+      : [...line];
+    for (const ch of parts) {
+      const b = enc.encode(ch).length;
+      if (bytes + b > (out.length ? 74 : 75)) { out.push(cur); cur = ""; bytes = 0; }
+      cur += ch; bytes += b;
+    }
+    out.push(cur);
+    return out.join("\r\n ");
+  }
+
+  function buildIcs(mems) {
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
+    const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Aathvan//Reminders//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
+    for (const m of mems) {
+      const [hh, mi] = (m.time || DEFAULT_TIME).split(":");
+      const start = m.due.replace(/-/g, "") + "T" + hh + mi + "00";      // local time on the phone
+      lines.push(
+        "BEGIN:VEVENT",
+        `UID:${m.id}@aathvan`,
+        `DTSTAMP:${stamp}`,
+        `DTSTART:${start}`,
+        "DURATION:PT15M",
+        `SUMMARY:${icsEscape(m.text)}`,
+        "DESCRIPTION:Aathvan reminder",
+        "BEGIN:VALARM",
+        "ACTION:DISPLAY",
+        `DESCRIPTION:${icsEscape(m.text)}`,
+        "TRIGGER:PT0S",
+        "END:VALARM",
+        "END:VEVENT",
+      );
+    }
+    lines.push("END:VCALENDAR");
+    return lines.map(fold).join("\r\n") + "\r\n";
+  }
+
+  // The reminder is kept on the phone and served by the app's offline worker,
+  // so nothing about it goes over the internet.
+  async function sendToCalendar(mems) {
+    mems = mems.filter((m) => m.due);
+    if (!mems.length) return;
+    const ics = buildIcs(mems);
+    const now = new Date().toISOString();
+    for (const m of mems) m.alertAt = now;
+    persist(); render();
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        const url = new URL("alert.ics", document.baseURI).href;
+        const cache = await caches.open("aathvan-alerts");
+        await cache.put(url, new Response(ics, { headers: { "Content-Type": "text/calendar; charset=utf-8" } }));
+        location.href = "alert.ics?" + Date.now();
+        return;
+      }
+    } catch (e) {}
+    const file = new File([ics], "Aathvan reminder.ics", { type: "text/calendar" });
+    location.href = URL.createObjectURL(file);
+  }
+
+  const upcoming = () => state.memories.filter((m) => !m.done && m.due && m.due >= todayYmd());
+
   // ---------- formatting ----------
 
   const fmtSaved = (iso) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
   const fmtDue = (ymd) => B.fromYmd(ymd).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
   const fmtTime = (iso) => new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
   const todayYmd = () => B.ymd(new Date());
+  const fmtClock = (hm) => B.timeName(hm, "en");
 
   // ---------- rendering ----------
 
@@ -99,11 +178,20 @@
     meta.append(el("span", null, "Saved " + fmtSaved(m.createdAt)));
     if (m.due) {
       const late = !m.done && m.due < todayYmd();
-      meta.append(el("span", "due" + (late ? " late" : ""), (late ? "Was due " : "Due ") + fmtDue(m.due)));
+      meta.append(el("span", "due" + (late ? " late" : ""), (late ? "Was due " : "Due ") + fmtDue(m.due) + (m.time ? ", " + fmtClock(m.time) : "")));
     }
+    if (m.alertAt && !m.done) meta.append(el("span", "alert-set", "🔔 In Calendar"));
     if (m.done && m.doneAt) meta.append(el("span", null, "Done " + fmtSaved(m.doneAt)));
     body.append(meta);
     card.append(btn, body);
+    if (m.due && !m.done && m.due >= todayYmd()) {
+      const bell = el("button", "bell" + (m.alertAt ? " is-set" : ""));
+      bell.type = "button";
+      bell.innerHTML = BELL;
+      bell.setAttribute("aria-label", m.alertAt ? "Add the alert to Calendar again" : "Set an alert in Calendar");
+      bell.onclick = () => sendToCalendar([m]);
+      card.append(bell);
+    }
     return card;
   }
 
@@ -123,7 +211,17 @@
     const box = el("div", "msg " + (msg.role === "user" ? "me" : "bot"));
     if (msg.voice) box.append(el("span", "voice-tag", "🎙"));
     box.append(document.createTextNode(msg.text));
-    (msg.actions || []).forEach((a) => box.append(chip(a)));
+    (msg.actions || []).forEach((a) => {
+      box.append(chip(a));
+      const m = a.kind === "added" && memory(a.id);
+      if (m && m.due && !m.done && m.due >= todayYmd()) {
+        const b = el("button", "set-alert" + (m.alertAt ? " is-set" : ""));
+        b.type = "button";
+        b.innerHTML = BELL + `<span>${m.alertAt ? "Alert added · Add again" : "Set alert · अलर्ट लावा"} (${fmtDue(m.due)}, ${fmtClock(m.time || DEFAULT_TIME)})</span>`;
+        b.onclick = () => sendToCalendar([m]);
+        box.append(b);
+      }
+    });
     (msg.refs || []).forEach((id) => { const m = memory(id); if (m) box.append(memCard(m)); });
     box.append(el("span", "time", fmtTime(msg.at)));
     return box;
@@ -176,6 +274,10 @@
     }
     const empty = q ? `No match for “${q}”.` : filter === "done" ? "Nothing marked done yet." : "Nothing here yet. Tell me something to remember in Chat.";
     listEl.replaceChildren(...(list.length ? list.map(memCard) : [el("p", "empty", empty)]));
+    const pending = upcoming().filter((m) => !m.alertAt);
+    const allBtn = $("#alert-all");
+    allBtn.hidden = !pending.length;
+    allBtn.querySelector("span").textContent = `Set alerts for ${pending.length} upcoming note${pending.length === 1 ? "" : "s"}`;
   }
 
   const render = () => { renderChat(); renderList(); };
@@ -208,6 +310,7 @@
     $("#view-list").hidden = t !== "list";
     scroller.scrollTop = t === "chat" ? scroller.scrollHeight : 0;
   }
+  $("#alert-all").onclick = () => sendToCalendar(upcoming().filter((m) => !m.alertAt));
   $("#tab-chat").onclick = () => showTab("chat");
   $("#tab-list").onclick = () => showTab("list");
   $("#search").addEventListener("input", (e) => { query = e.target.value; renderList(); });
@@ -525,6 +628,14 @@
       });
       replyBox.append(ul);
       if (items.length > 6) replyBox.append(el("div", "sub", `+${items.length - 6} more in the chat`));
+    }
+    const added = (bot.actions || []).map((a) => a.kind === "added" && memory(a.id)).find((m) => m && m.due);
+    if (added) {
+      const b = el("button", "set-alert dark");
+      b.type = "button";
+      b.innerHTML = BELL + `<span>Set alert · अलर्ट लावा (${fmtDue(added.due)}, ${fmtClock(added.time || DEFAULT_TIME)})</span>`;
+      b.onclick = () => sendToCalendar([added]);
+      replyBox.append(b);
     }
     replyBox.hidden = false;
     if (speakReplies) speak(bot, items);
